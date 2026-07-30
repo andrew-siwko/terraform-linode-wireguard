@@ -165,6 +165,13 @@ server {
         internal;
     }
 
+    # Bare root otherwise falls through to proxy_pass below and hits
+    # Liberty's own default welcome page (banner-welcome), not the app --
+    # the actual console lives under the /qha-admin context root.
+    location = / {
+        return 301 https://\$host/qha-admin/;
+    }
+
     location / {
         proxy_pass https://${wireguard_client_tunnel_ip}:${qha_admin_backend_port};
         # The backend's own cert is self-signed (see admin-console/liberty/
