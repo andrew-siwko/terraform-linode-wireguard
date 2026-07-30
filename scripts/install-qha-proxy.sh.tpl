@@ -60,9 +60,17 @@ ln -sfn /mnt/data/letsencrypt /etc/letsencrypt
 # real /etc/wireguard and /etc/letsencrypt for labeling purposes; restorecon
 # then applies it. Re-run restorecon again at the end of this script too,
 # after certbot has written its own files into /mnt/data/letsencrypt.
+#
+# restorecon also has to touch /mnt/data itself, not just the wireguard/
+# letsencrypt subdirs: a freshly mkfs'd+mounted filesystem's root starts out
+# as unlabeled_t (SELinux's deny-by-default catch-all), and a confined
+# process gets denied traversal through that unlabeled parent before it ever
+# reaches the correctly-labeled child -- same "does not exist" symptom, one
+# directory level up. Found via the same live-debugging process as above.
 dnf -y install policycoreutils-python-utils
 semanage fcontext -a -e /etc/wireguard /mnt/data/wireguard
 semanage fcontext -a -e /etc/letsencrypt /mnt/data/letsencrypt
+restorecon -Rv /mnt/data
 restorecon -Rv /mnt/data/wireguard /mnt/data/letsencrypt
 
 echo "=== Disabling firewalld (relying on Linode Cloud Firewall instead) ==="
