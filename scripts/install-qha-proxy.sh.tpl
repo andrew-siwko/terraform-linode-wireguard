@@ -178,6 +178,15 @@ server {
 NGINXFULL
 
 nginx -t
+
+# Rocky9's nginx package runs confined under SELinux with
+# httpd_can_network_connect off by default, which blocks proxy_pass to ANY
+# backend (even a plain TCP address like the WireGuard tunnel IP here) --
+# nginx itself starts fine and passes `nginx -t`, but every request 502s.
+# Same category of confined-vs-unconfined gap as the wg-quick fix above;
+# this one doesn't need a filesystem relabel, just the network boolean.
+setsebool -P httpd_can_network_connect on
+
 systemctl enable --now nginx
 
 echo "=== Enabling certbot auto-renewal ==="
