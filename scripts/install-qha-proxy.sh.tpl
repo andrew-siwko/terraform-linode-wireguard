@@ -137,7 +137,7 @@ cat > /usr/share/nginx/html/proxy-unavailable.html << 'MAINT'
 <html><head><title>Temporarily Unavailable</title></head>
 <body style="font-family: sans-serif; text-align: center; margin-top: 4em;">
 <h1>QHA Admin Console Temporarily Unavailable</h1>
-<p>The connection back to the home cluster is down. Please try again shortly.</p>
+<p>The connection to the application is down. Please try again shortly.</p>
 </body></html>
 MAINT
 
