@@ -4,6 +4,12 @@ variable "LINODE_API_KEY" {
   sensitive   = true
 }
 
+variable "LINODE_DNS_TOKEN" {
+  description = "Narrowly-scoped Linode Personal Access Token (Domains: Read/Write only, everything else None) used by certbot's DNS-01 challenge on the instance. Deliberately separate from LINODE_API_KEY, which has full account access -- this one ends up embedded in the rendered StackScript, so it shouldn't be the broad key."
+  type        = string
+  sensitive   = true
+}
+
 variable "instance_region" {
   description = "The region to create the instance"
   type        = string

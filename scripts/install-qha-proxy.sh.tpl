@@ -12,7 +12,7 @@ dnf -y install epel-release
 dnf config-manager --set-enabled crb || true
 
 echo "=== Installing nginx, certbot, wireguard-tools ==="
-dnf -y install nginx certbot wireguard-tools
+dnf -y install nginx certbot wireguard-tools python3-certbot-dns-linode
 
 echo "=== Waiting for attached data volume ==="
 VOLUME_DEV="/dev/disk/by-id/scsi-0Linode_Volume_qha-proxy-data"
@@ -101,29 +101,24 @@ echo "    Re-apply Terraform with wireguard_client_public_key set once the in-cl
 chmod 600 /etc/wireguard/wg0.conf
 systemctl enable --now wg-quick@wg0
 
-echo "=== Writing minimal nginx config (HTTP challenge + redirect only, no cert yet) ==="
-mkdir -p /var/www/certbot
-cat > /etc/nginx/conf.d/qha-admin.conf << NGINXHTTP
-server {
-    listen 80;
-    server_name ${qha_admin_fqdn};
+echo "=== Requesting Let's Encrypt certificate via DNS-01 (no-op if a valid one already exists) ==="
+# DNS-01, not the webroot/HTTP-01 method: HTTP-01 validation requires
+# ${qha_admin_fqdn} to already resolve to this instance at challenge time,
+# which it deliberately doesn't yet (this hostname stays pointed at the
+# internal LAN IP until the whole proxy chain is verified working -- see
+# 07-domain.tf). DNS-01 proves domain ownership via a TXT record instead,
+# so it works before that cutover and doesn't need nginx running at all
+# yet. certbot saves the auth method in its renewal config, so the
+# certbot-renew timer below reuses --dns-linode automatically.
+mkdir -p /etc/letsencrypt
+cat > /etc/letsencrypt/linode.ini << EOF
+dns_linode_key = ${linode_dns_token}
+dns_linode_version = 4
+EOF
+chmod 600 /etc/letsencrypt/linode.ini
 
-    location /.well-known/acme-challenge/ {
-        root /var/www/certbot;
-    }
-
-    location / {
-        return 301 https://\$host\$request_uri;
-    }
-}
-NGINXHTTP
-
-systemctl enable --now nginx
-nginx -t && systemctl reload nginx
-
-echo "=== Requesting Let's Encrypt certificate (no-op if a valid one already exists) ==="
-certbot certonly --webroot -w /var/www/certbot -d ${qha_admin_fqdn} \
-  --non-interactive --agree-tos -m ${letsencrypt_email} --keep-until-expiring
+certbot certonly --dns-linode --dns-linode-credentials /etc/letsencrypt/linode.ini \
+  -d ${qha_admin_fqdn} --non-interactive --agree-tos -m ${letsencrypt_email} --keep-until-expiring
 
 echo "=== Relabeling certbot's newly-written files under the /etc/letsencrypt equivalence ==="
 restorecon -Rv /mnt/data/letsencrypt
@@ -138,15 +133,11 @@ cat > /usr/share/nginx/html/proxy-unavailable.html << 'MAINT'
 </body></html>
 MAINT
 
-echo "=== Writing full nginx config (HTTPS proxy to the WireGuard tunnel, graceful failure) ==="
+echo "=== Writing nginx config (HTTP redirect + HTTPS proxy to the WireGuard tunnel, graceful failure) ==="
 cat > /etc/nginx/conf.d/qha-admin.conf << NGINXFULL
 server {
     listen 80;
     server_name ${qha_admin_fqdn};
-
-    location /.well-known/acme-challenge/ {
-        root /var/www/certbot;
-    }
 
     location / {
         return 301 https://\$host\$request_uri;
@@ -186,7 +177,8 @@ server {
 }
 NGINXFULL
 
-nginx -t && systemctl reload nginx
+nginx -t
+systemctl enable --now nginx
 
 echo "=== Enabling certbot auto-renewal ==="
 systemctl enable --now certbot-renew.timer 2>/dev/null || \

@@ -13,6 +13,7 @@ resource "linode_stackscript" "qha_proxy_install" {
     wireguard_client_tunnel_ip  = var.wireguard_client_tunnel_ip
     wireguard_client_public_key = var.wireguard_client_public_key
     qha_admin_backend_port      = var.qha_admin_backend_port
+    linode_dns_token            = var.LINODE_DNS_TOKEN
   })
   images = ["linode/rocky9"]
 }

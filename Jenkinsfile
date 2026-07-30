@@ -17,6 +17,10 @@ pipeline {
         // (same one bound in the terraform-linode-create freestyle job and
         // terraform-linode-rustdesk).
         TF_VAR_LINODE_API_KEY = credentials('b4221ab43ff3c5ce2ac2baf652a26c5c93acc65deb7ee6e9f9a0727bab09eb9f')
+        // Deliberately a separate, narrowly-scoped credential (Domains:
+        // Read/Write only) -- see 01-variables.tf. Create a "Secret text"
+        // credential in Jenkins with this ID before the first real build.
+        TF_VAR_LINODE_DNS_TOKEN = credentials('linode-dns-token')
     }
 
     stages {
