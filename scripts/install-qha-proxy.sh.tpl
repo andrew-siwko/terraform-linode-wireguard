@@ -48,6 +48,23 @@ ln -sfn /mnt/data/wireguard /etc/wireguard
 rm -rf /etc/letsencrypt
 ln -sfn /mnt/data/letsencrypt /etc/letsencrypt
 
+# Rocky9 enforces SELinux by default. Without this, wg-quick@wg0.service
+# (running confined, unlike an interactive root SSH session which runs
+# unconfined and never hits this) is silently blocked from following the
+# /etc/wireguard symlink out to /mnt/data/wireguard -- it fails claiming
+# the config file "does not exist" even though it's right there, and this
+# specific denial doesn't reliably show up via ausearch -m avc, which is
+# what made this take real live debugging to actually pin down rather than
+# something obvious from the first failure. semanage fcontext -e declares
+# an equivalence so SELinux treats the relocated paths as if they were the
+# real /etc/wireguard and /etc/letsencrypt for labeling purposes; restorecon
+# then applies it. Re-run restorecon again at the end of this script too,
+# after certbot has written its own files into /mnt/data/letsencrypt.
+dnf -y install policycoreutils-python-utils
+semanage fcontext -a -e /etc/wireguard /mnt/data/wireguard
+semanage fcontext -a -e /etc/letsencrypt /mnt/data/letsencrypt
+restorecon -Rv /mnt/data/wireguard /mnt/data/letsencrypt
+
 echo "=== Disabling firewalld (relying on Linode Cloud Firewall instead) ==="
 systemctl disable --now firewalld || true
 
@@ -107,6 +124,9 @@ nginx -t && systemctl reload nginx
 echo "=== Requesting Let's Encrypt certificate (no-op if a valid one already exists) ==="
 certbot certonly --webroot -w /var/www/certbot -d ${qha_admin_fqdn} \
   --non-interactive --agree-tos -m ${letsencrypt_email} --keep-until-expiring
+
+echo "=== Relabeling certbot's newly-written files under the /etc/letsencrypt equivalence ==="
+restorecon -Rv /mnt/data/letsencrypt
 
 echo "=== Writing maintenance page for when the tunnel/cluster is unreachable ==="
 cat > /usr/share/nginx/html/proxy-unavailable.html << 'MAINT'
