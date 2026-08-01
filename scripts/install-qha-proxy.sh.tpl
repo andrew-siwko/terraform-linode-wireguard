@@ -1,12 +1,13 @@
 #!/bin/bash
 # Installed via Linode StackScript (terraform-linode-wireguard).
 # Sets up nginx + certbot + WireGuard to reverse-proxy public HTTPS traffic
-# for *.siwko.org and *.siwko.net back through a tunnel to the in-cluster
-# ingress-nginx controller (which does its own Host-based routing to
-# individual apps), without opening any inbound port on the home network.
-# qha_admin_fqdn/qha_admin_fqdn_alt are no longer referenced by this script
-# itself (kept as Terraform locals for now, see 04-stackscript.tf) now that
-# routing is wildcard-based rather than naming specific hostnames here.
+# for *.siwko.org, *.siwko.net, and *.siwko.com back through a tunnel to the
+# in-cluster ingress-nginx controller (which does its own Host-based
+# routing to individual apps), without opening any inbound port on the home
+# network. qha_admin_fqdn/qha_admin_fqdn_alt are no longer referenced by
+# this script itself (kept as Terraform locals for now, see
+# 04-stackscript.tf) now that routing is wildcard-based rather than naming
+# specific hostnames here.
 set -euo pipefail
 
 exec > >(tee /var/log/qha-proxy-install.log) 2>&1
@@ -129,16 +130,17 @@ dns_linode_version = 4
 EOF
 chmod 600 /etc/letsencrypt/linode.ini
 
-# Wildcard, not the two explicit hostnames from earlier -- this proxy now
-# fronts multiple apps across multiple subdomains (see
-# k8s/ingress-nginx-controller.yaml in the qha repo for the in-cluster
-# side), and a wildcard means onboarding a brand-new subdomain later needs
-# zero changes here or to DNS. Wildcards are only obtainable via DNS-01
-# (HTTP-01 can't prove ownership of "*"), which is exactly the method
-# already in use.
+# Wildcard cert covering all three zones -- this proxy now fronts multiple
+# apps across multiple subdomains (see k8s/ingress-nginx-controller.yaml in
+# the qha repo for the in-cluster side), so onboarding a brand-new
+# subdomain later needs no further cert/nginx changes here, just a DNS
+# record (see 07-domain.tf's comment on why that stays a real record, not
+# a DNS wildcard) plus an in-cluster Ingress. Wildcards are only obtainable
+# via DNS-01 (HTTP-01 can't prove ownership of "*"), which is exactly the
+# method already in use.
 certbot certonly --dns-linode --dns-linode-credentials /etc/letsencrypt/linode.ini \
   --cert-name wildcard-siwko \
-  -d '*.siwko.org' -d '*.siwko.net' --non-interactive --agree-tos -m ${letsencrypt_email} --keep-until-expiring
+  -d '*.siwko.org' -d '*.siwko.net' -d '*.siwko.com' --non-interactive --agree-tos -m ${letsencrypt_email} --keep-until-expiring
 
 echo "=== Relabeling certbot's newly-written files under the /etc/letsencrypt equivalence ==="
 restorecon -Rv /mnt/data/letsencrypt
@@ -163,7 +165,7 @@ echo "=== Writing nginx config (HTTP redirect + HTTPS proxy to the WireGuard tun
 cat > /etc/nginx/conf.d/qha-admin.conf << NGINXFULL
 server {
     listen 80;
-    server_name *.siwko.org *.siwko.net;
+    server_name *.siwko.org *.siwko.net *.siwko.com;
 
     location / {
         return 301 https://\$host\$request_uri;
@@ -172,7 +174,7 @@ server {
 
 server {
     listen 443 ssl;
-    server_name *.siwko.org *.siwko.net;
+    server_name *.siwko.org *.siwko.net *.siwko.com;
 
     ssl_certificate     /etc/letsencrypt/live/wildcard-siwko/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/wildcard-siwko/privkey.pem;

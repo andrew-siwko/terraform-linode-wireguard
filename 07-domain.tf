@@ -54,6 +54,17 @@ resource "linode_domain_record" "qha_admin_net_a_record" {
   target      = one(linode_instance.asiwko-qha-proxy-01.ipv4)
 }
 
+# siwko.com is a third, unrelated domain already hosted on the same Linode
+# account/nameservers -- same data-source-not-managed-resource treatment as
+# dns_zone_net above. No app hostname is added here yet: the proxy's
+# wildcard cert and nginx server_name already cover *.siwko.com (see
+# install-qha-proxy.sh.tpl) so a future app just needs its own explicit
+# linode_domain_record here, same pattern as qha_admin_a_record/
+# qha_admin_net_a_record.
+data "linode_domain" "dns_zone_com" {
+  domain = var.domain_name_com
+}
+
 # A wildcard A record (name = "*") was tried here and reverted -- DO NOT
 # re-add one. This cluster's nodes carry "siwko.org" as a DNS search domain
 # (pre-existing, unrelated to this project), and with ndots:5 in every

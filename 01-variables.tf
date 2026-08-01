@@ -34,6 +34,12 @@ variable "domain_name_alt" {
   default     = "siwko.net"
 }
 
+variable "domain_name_com" {
+  description = "Third domain the proxy's wildcard cert/nginx config covers, for future apps -- see 07-domain.tf. No app hostname lives here yet; unlike domain_name/domain_name_alt this doesn't have its own explicit qha-admin A record, just the zone data source so a future app can add one the same way."
+  type        = string
+  default     = "siwko.com"
+}
+
 variable "domain_soa_email" {
   description = "The domain manager e-mail address."
   type        = string
