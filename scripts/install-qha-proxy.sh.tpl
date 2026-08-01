@@ -1,9 +1,12 @@
 #!/bin/bash
 # Installed via Linode StackScript (terraform-linode-wireguard).
 # Sets up nginx + certbot + WireGuard to reverse-proxy public HTTPS traffic
-# for ${qha_admin_fqdn} and ${qha_admin_fqdn_alt} back through a tunnel to
-# the in-cluster qha-admin-console, without opening any inbound port on the
-# home network.
+# for *.siwko.org and *.siwko.net back through a tunnel to the in-cluster
+# ingress-nginx controller (which does its own Host-based routing to
+# individual apps), without opening any inbound port on the home network.
+# qha_admin_fqdn/qha_admin_fqdn_alt are no longer referenced by this script
+# itself (kept as Terraform locals for now, see 04-stackscript.tf) now that
+# routing is wildcard-based rather than naming specific hostnames here.
 set -euo pipefail
 
 exec > >(tee /var/log/qha-proxy-install.log) 2>&1
@@ -126,9 +129,16 @@ dns_linode_version = 4
 EOF
 chmod 600 /etc/letsencrypt/linode.ini
 
+# Wildcard, not the two explicit hostnames from earlier -- this proxy now
+# fronts multiple apps across multiple subdomains (see
+# k8s/ingress-nginx-controller.yaml in the qha repo for the in-cluster
+# side), and a wildcard means onboarding a brand-new subdomain later needs
+# zero changes here or to DNS. Wildcards are only obtainable via DNS-01
+# (HTTP-01 can't prove ownership of "*"), which is exactly the method
+# already in use.
 certbot certonly --dns-linode --dns-linode-credentials /etc/letsencrypt/linode.ini \
-  --cert-name ${qha_admin_fqdn} \
-  -d ${qha_admin_fqdn} -d ${qha_admin_fqdn_alt} --non-interactive --agree-tos -m ${letsencrypt_email} --keep-until-expiring
+  --cert-name wildcard-siwko \
+  -d '*.siwko.org' -d '*.siwko.net' --non-interactive --agree-tos -m ${letsencrypt_email} --keep-until-expiring
 
 echo "=== Relabeling certbot's newly-written files under the /etc/letsencrypt equivalence ==="
 restorecon -Rv /mnt/data/letsencrypt
@@ -138,16 +148,22 @@ cat > /usr/share/nginx/html/proxy-unavailable.html << 'MAINT'
 <!DOCTYPE html>
 <html><head><title>Temporarily Unavailable</title></head>
 <body style="font-family: sans-serif; text-align: center; margin-top: 4em;">
-<h1>QHA Admin Console Temporarily Unavailable</h1>
+<h1>Application Temporarily Unavailable</h1>
 <p>The connection to the application is down. Please try again shortly.</p>
 </body></html>
 MAINT
 
 echo "=== Writing nginx config (HTTP redirect + HTTPS proxy to the WireGuard tunnel, graceful failure) ==="
+# server_name is a wildcard, not the historical two explicit qha-admin
+# hostnames: this box now fronts multiple apps across multiple subdomains,
+# routed by ingress-nginx inside the cluster based on the Host header this
+# config forwards. Per-app concerns (like qha-admin's old bare "/" ->
+# "/qha-admin/" redirect) live on that app's own Ingress resource now, not
+# here -- see k8s/qha-admin-console-ingress.yaml in the qha repo.
 cat > /etc/nginx/conf.d/qha-admin.conf << NGINXFULL
 server {
     listen 80;
-    server_name ${qha_admin_fqdn} ${qha_admin_fqdn_alt};
+    server_name *.siwko.org *.siwko.net;
 
     location / {
         return 301 https://\$host\$request_uri;
@@ -156,10 +172,10 @@ server {
 
 server {
     listen 443 ssl;
-    server_name ${qha_admin_fqdn} ${qha_admin_fqdn_alt};
+    server_name *.siwko.org *.siwko.net;
 
-    ssl_certificate     /etc/letsencrypt/live/${qha_admin_fqdn}/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/${qha_admin_fqdn}/privkey.pem;
+    ssl_certificate     /etc/letsencrypt/live/wildcard-siwko/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/wildcard-siwko/privkey.pem;
 
     error_page 502 503 504 /proxy-unavailable.html;
     location = /proxy-unavailable.html {
@@ -167,19 +183,15 @@ server {
         internal;
     }
 
-    # Bare root otherwise falls through to proxy_pass below and hits
-    # Liberty's own default welcome page (banner-welcome), not the app --
-    # the actual console lives under the /qha-admin context root.
-    location = / {
-        return 301 https://\$host/qha-admin/;
-    }
-
     location / {
-        proxy_pass https://${wireguard_client_tunnel_ip}:${qha_admin_backend_port};
-        # The backend's own cert is self-signed (see admin-console/liberty/
-        # server.xml) -- the WireGuard tunnel itself is already encrypted,
-        # so this proxy_pass leg doesn't need its own cert trust chain.
-        proxy_ssl_verify off;
+        # Plain HTTP, not HTTPS: this now talks to ingress-nginx inside the
+        # cluster (see k8s/ingress-nginx-controller.yaml), not straight to
+        # one app's self-signed backend. The WireGuard tunnel is already
+        # encrypted, so re-encrypting this hop never bought anything --
+        # re-encryption to individual backends that need it (like
+        # qha-admin-console's self-signed Liberty cert) is now
+        # ingress-nginx's per-Ingress job instead.
+        proxy_pass http://${wireguard_client_tunnel_ip}:${tunnel_backend_port};
         # Short timeouts are what makes "fail gracefully when the cluster is
         # unreachable" actually mean something -- without these, a dead
         # tunnel means visitors just hang instead of seeing the maintenance

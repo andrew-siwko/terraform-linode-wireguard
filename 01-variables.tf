@@ -76,8 +76,8 @@ variable "wireguard_client_public_key" {
   default     = ""
 }
 
-variable "qha_admin_backend_port" {
-  description = "Port on the WireGuard client tunnel IP that nginx proxies HTTPS traffic to (the admin console's own HTTPS listener)."
+variable "tunnel_backend_port" {
+  description = "Port on the WireGuard client tunnel IP that nginx proxies plain-HTTP traffic to. Generic, not app-specific -- the in-cluster tunnel-client pod forwards this port straight through to ingress-nginx, which does its own Host-header-based routing to whichever app's Ingress resource matches the request. Must match LOCAL_PORT in qha-tunnel-client-deployment.yaml (same port, opposite ends of the WireGuard tunnel)."
   type        = number
-  default     = 9443
+  default     = 8080
 }

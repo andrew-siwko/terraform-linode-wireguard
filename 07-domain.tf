@@ -53,3 +53,22 @@ resource "linode_domain_record" "qha_admin_net_a_record" {
   ttl_sec     = 30
   target      = one(linode_instance.asiwko-qha-proxy-01.ipv4)
 }
+
+# A wildcard A record (name = "*") was tried here and reverted -- DO NOT
+# re-add one. This cluster's nodes carry "siwko.org" as a DNS search domain
+# (pre-existing, unrelated to this project), and with ndots:5 in every
+# pod's resolv.conf, in-cluster lookups that don't resolve within
+# cluster.local fall through to the search-suffixed "...siwko.org" form
+# before ever trying the bare name. A live "*.siwko.org" record matched
+# that fallback query, so qha-tunnel-client's own socat (resolving
+# ingress-nginx-controller.ingress-nginx.svc.cluster.local) silently
+# started connecting to the *public* proxy IP instead of the real
+# ClusterIP -- looping traffic back out to the internet and into the edge
+# nginx's own port-80 redirect, which is what caused the ERR_TOO_MANY_
+# REDIRECTS outage. Confirmed live, then rolled back (records 3417841/
+# 45365040 and 1228111/45365041 deleted). The wildcard TLS cert
+# ("wildcard-siwko" in install-qha-proxy.sh.tpl) and nginx's wildcard
+# server_name are NOT affected by this and are safe to keep -- only an
+# actual public DNS wildcard collides with the cluster's search domain.
+# New app subdomains need one explicit linode_domain_record each, same
+# pattern as qha_admin_a_record/qha_admin_net_a_record above.

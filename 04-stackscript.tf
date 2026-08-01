@@ -5,7 +5,7 @@ locals {
 
 resource "linode_stackscript" "qha_proxy_install" {
   label       = "qha-proxy-install"
-  description = "Installs nginx, certbot, and WireGuard to reverse-proxy public HTTPS traffic for the QHA admin console back through a tunnel to the home cluster."
+  description = "Installs nginx, certbot, and WireGuard to reverse-proxy public HTTPS traffic for multiple apps (routed by domain via an in-cluster Ingress controller) back through a tunnel to the home cluster."
   script = templatefile("${path.module}/scripts/install-qha-proxy.sh.tpl", {
     qha_admin_fqdn              = local.qha_admin_fqdn
     qha_admin_fqdn_alt          = local.qha_admin_fqdn_alt
@@ -14,7 +14,7 @@ resource "linode_stackscript" "qha_proxy_install" {
     wireguard_server_tunnel_ip  = var.wireguard_server_tunnel_ip
     wireguard_client_tunnel_ip  = var.wireguard_client_tunnel_ip
     wireguard_client_public_key = var.wireguard_client_public_key
-    qha_admin_backend_port      = var.qha_admin_backend_port
+    tunnel_backend_port         = var.tunnel_backend_port
     linode_dns_token            = var.LINODE_DNS_TOKEN
   })
   images = ["linode/rocky9"]
