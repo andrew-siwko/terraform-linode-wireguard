@@ -28,6 +28,12 @@ variable "domain_name" {
   default     = "siwko.org"
 }
 
+variable "domain_name_alt" {
+  description = "Second domain the qha-admin proxy also answers for (same qha_admin_hostname label). Already Linode-hosted DNS, unrelated to domain_name's zone -- see 07-domain.tf for the record and DNS-01 cert-request loop in the install script for how it's proven."
+  type        = string
+  default     = "siwko.net"
+}
+
 variable "domain_soa_email" {
   description = "The domain manager e-mail address."
   type        = string

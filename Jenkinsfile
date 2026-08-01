@@ -45,6 +45,13 @@ pipeline {
                     else
                         echo "Domain already managed. Skipping import."
                     fi
+
+                    if ! terraform state list | grep -q "linode_domain_record.qha_admin_net_a_record"; then
+                        echo "qha-admin.siwko.net A record not in state. Importing..."
+                        terraform import linode_domain_record.qha_admin_net_a_record 1228111,45364910
+                    else
+                        echo "qha-admin.siwko.net A record already managed. Skipping import."
+                    fi
                 '''
             }
         }

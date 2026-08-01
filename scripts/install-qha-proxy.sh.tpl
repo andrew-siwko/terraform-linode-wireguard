@@ -1,8 +1,9 @@
 #!/bin/bash
 # Installed via Linode StackScript (terraform-linode-wireguard).
 # Sets up nginx + certbot + WireGuard to reverse-proxy public HTTPS traffic
-# for ${qha_admin_fqdn} back through a tunnel to the in-cluster
-# qha-admin-console, without opening any inbound port on the home network.
+# for ${qha_admin_fqdn} and ${qha_admin_fqdn_alt} back through a tunnel to
+# the in-cluster qha-admin-console, without opening any inbound port on the
+# home network.
 set -euo pipefail
 
 exec > >(tee /var/log/qha-proxy-install.log) 2>&1
@@ -126,7 +127,8 @@ EOF
 chmod 600 /etc/letsencrypt/linode.ini
 
 certbot certonly --dns-linode --dns-linode-credentials /etc/letsencrypt/linode.ini \
-  -d ${qha_admin_fqdn} --non-interactive --agree-tos -m ${letsencrypt_email} --keep-until-expiring
+  --cert-name ${qha_admin_fqdn} \
+  -d ${qha_admin_fqdn} -d ${qha_admin_fqdn_alt} --non-interactive --agree-tos -m ${letsencrypt_email} --keep-until-expiring
 
 echo "=== Relabeling certbot's newly-written files under the /etc/letsencrypt equivalence ==="
 restorecon -Rv /mnt/data/letsencrypt
@@ -145,7 +147,7 @@ echo "=== Writing nginx config (HTTP redirect + HTTPS proxy to the WireGuard tun
 cat > /etc/nginx/conf.d/qha-admin.conf << NGINXFULL
 server {
     listen 80;
-    server_name ${qha_admin_fqdn};
+    server_name ${qha_admin_fqdn} ${qha_admin_fqdn_alt};
 
     location / {
         return 301 https://\$host\$request_uri;
@@ -154,7 +156,7 @@ server {
 
 server {
     listen 443 ssl;
-    server_name ${qha_admin_fqdn};
+    server_name ${qha_admin_fqdn} ${qha_admin_fqdn_alt};
 
     ssl_certificate     /etc/letsencrypt/live/${qha_admin_fqdn}/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/${qha_admin_fqdn}/privkey.pem;
