@@ -185,6 +185,25 @@ server {
         internal;
     }
 
+    # WordPress admin work (WXR import/export, media uploads) needs both a
+    # body-size allowance nginx's 1m compiled-in default doesn't give it (a
+    # WXR upload 413'd here, confirmed live) and more time to actually
+    # finish than the general fail-fast timeout below allows for (a large
+    # import can legitimately run well past 15s once the tunnel/cluster IS
+    # up and just working). Kept as its own location, ahead of the general
+    # "/" below, specifically so every OTHER app behind this proxy keeps the
+    # short fail-fast behavior -- this isn't a case for raising it globally.
+    location /wordpress {
+        proxy_pass http://${wireguard_client_tunnel_ip}:${tunnel_backend_port};
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 300s;
+        client_max_body_size 512m;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+
     location / {
         # Plain HTTP, not HTTPS: this now talks to ingress-nginx inside the
         # cluster (see k8s/ingress-nginx-controller.yaml), not straight to
