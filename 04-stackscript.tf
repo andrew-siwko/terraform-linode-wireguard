@@ -9,6 +9,9 @@ resource "linode_stackscript" "qha_proxy_install" {
   script = templatefile("${path.module}/scripts/install-qha-proxy.sh.tpl", {
     qha_admin_fqdn              = local.qha_admin_fqdn
     qha_admin_fqdn_alt          = local.qha_admin_fqdn_alt
+    domain_name                 = var.domain_name
+    domain_name_alt             = var.domain_name_alt
+    domain_name_com             = var.domain_name_com
     letsencrypt_email           = var.letsencrypt_email
     wireguard_listen_port       = var.wireguard_listen_port
     wireguard_server_tunnel_ip  = var.wireguard_server_tunnel_ip

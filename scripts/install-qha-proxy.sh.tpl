@@ -138,9 +138,18 @@ chmod 600 /etc/letsencrypt/linode.ini
 # a DNS wildcard) plus an in-cluster Ingress. Wildcards are only obtainable
 # via DNS-01 (HTTP-01 can't prove ownership of "*"), which is exactly the
 # method already in use.
+#
+# The three bare apex names (-d ${domain_name} etc, no "*.") are also on
+# this cert alongside their wildcards: a wildcard SAN never matches its own
+# bare apex domain, and all three apexes are reachable (siwko.net and
+# siwko.com point straight at this proxy; siwko.org will once its
+# Kubernetes node rebuild finishes and DNS is repointed here). Without the
+# apex SAN, hitting the bare domain presents no matching cert name at all.
 certbot certonly --dns-linode --dns-linode-credentials /etc/letsencrypt/linode.ini \
   --cert-name wildcard-siwko \
-  -d '*.siwko.org' -d '*.siwko.net' -d '*.siwko.com' --non-interactive --agree-tos -m ${letsencrypt_email} --keep-until-expiring
+  -d '*.${domain_name}' -d '*.${domain_name_alt}' -d '*.${domain_name_com}' \
+  -d '${domain_name}' -d '${domain_name_alt}' -d '${domain_name_com}' \
+  --non-interactive --agree-tos -m ${letsencrypt_email} --keep-until-expiring
 
 echo "=== Relabeling certbot's newly-written files under the /etc/letsencrypt equivalence ==="
 restorecon -Rv /mnt/data/letsencrypt
@@ -165,16 +174,37 @@ echo "=== Writing nginx config (HTTP redirect + HTTPS proxy to the WireGuard tun
 cat > /etc/nginx/conf.d/qha-admin.conf << NGINXFULL
 server {
     listen 80;
-    server_name *.siwko.org *.siwko.net *.siwko.com;
+    server_name *.${domain_name} *.${domain_name_alt} *.${domain_name_com} ${domain_name} ${domain_name_alt} ${domain_name_com};
 
     location / {
         return 301 https://\$host\$request_uri;
     }
 }
 
+# Bare apex domains, plus the "www" label on the two non-canonical zones,
+# all funnel to the canonical www.${domain_name} instead of being routed
+# through the tunnel like every other subdomain: none of them have an
+# in-cluster Ingress of their own (only www.${domain_name} does -- see
+# the www-siwko-* Ingress resources in the qha repo's k8s/ directory), so
+# without this block they'd reach ingress-nginx and 404 there instead of
+# redirecting cleanly here. www.${domain_name} itself is deliberately NOT
+# listed -- it needs to fall through to the wildcard proxy block below, not
+# redirect to itself.
 server {
     listen 443 ssl;
-    server_name *.siwko.org *.siwko.net *.siwko.com;
+    server_name ${domain_name} ${domain_name_alt} ${domain_name_com} www.${domain_name_alt} www.${domain_name_com};
+
+    ssl_certificate     /etc/letsencrypt/live/wildcard-siwko/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/wildcard-siwko/privkey.pem;
+
+    location / {
+        return 301 https://www.${domain_name}\$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    server_name *.${domain_name} *.${domain_name_alt} *.${domain_name_com};
 
     ssl_certificate     /etc/letsencrypt/live/wildcard-siwko/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/wildcard-siwko/privkey.pem;
