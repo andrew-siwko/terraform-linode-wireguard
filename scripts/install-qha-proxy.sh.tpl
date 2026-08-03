@@ -157,10 +157,15 @@ restorecon -Rv /mnt/data/letsencrypt
 echo "=== Writing maintenance page for when the tunnel/cluster is unreachable ==="
 cat > /usr/share/nginx/html/proxy-unavailable.html << 'MAINT'
 <!DOCTYPE html>
-<html><head><title>Temporarily Unavailable</title></head>
+<html><head><title>Temporarily Unavailable</title>
+<!-- Auto-retry: silently reloads every 15s so the page recovers on its own
+     once the WireGuard tunnel/home cluster comes back, no manual refresh
+     needed. -->
+<meta http-equiv="refresh" content="15">
+</head>
 <body style="font-family: sans-serif; text-align: center; margin-top: 4em;">
 <h1>Application Temporarily Unavailable</h1>
-<p>The connection to the application is down. Please try again shortly.</p>
+<p>The connection back to the home cluster is down. Please try again shortly.</p>
 </body></html>
 MAINT
 
