@@ -31,6 +31,21 @@ resource "linode_domain_record" "qha_admin_a_record" {
   target      = one(linode_instance.asiwko-qha-proxy-01.ipv4)
 }
 
+# Same proxy chain as qha_admin_a_record (edge nginx's server_name is
+# already a wildcard -- see install-qha-proxy.sh.tpl -- so this is the only
+# change needed here; routing to the actual receiver Service happens via
+# qha-webhook-receiver-ingress.yaml's Host-header rule once traffic reaches
+# ingress-nginx). Deliberately its own explicit record, not a wildcard --
+# see the comment at the bottom of this file for why a wildcard record was
+# tried and reverted.
+resource "linode_domain_record" "qha_webhooks_a_record" {
+  domain_id   = linode_domain.dns_zone.id
+  name        = var.qha_webhooks_hostname
+  record_type = "A"
+  ttl_sec     = 30
+  target      = one(linode_instance.asiwko-qha-proxy-01.ipv4)
+}
+
 # siwko.net is a second, unrelated domain already hosted on the same Linode
 # account/nameservers (confirmed via NS lookup) -- data source, not a
 # managed resource like dns_zone above, so Terraform only reads its zone id

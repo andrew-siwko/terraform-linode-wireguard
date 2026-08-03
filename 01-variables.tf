@@ -58,6 +58,12 @@ variable "qha_admin_hostname" {
   default     = "qha-admin"
 }
 
+variable "qha_webhooks_hostname" {
+  description = "DNS label (under domain_name) for the in-cluster webhook receiver -- see qha_webhooks_a_record in 07-domain.tf. Only needed on domain_name (siwko.org, where Populi webhooks already land on lts.siwko.org); unlike qha_admin_hostname, this has no reason to also exist on domain_name_alt/domain_name_com."
+  type        = string
+  default     = "qha-webhooks"
+}
+
 variable "wireguard_listen_port" {
   description = "UDP port the WireGuard server listens on."
   type        = number
