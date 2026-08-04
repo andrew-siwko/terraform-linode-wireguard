@@ -70,7 +70,7 @@ resource "linode_domain_record" "qha_admin_net_a_record" {
 }
 
 resource "linode_domain_record" "probe_a_record" {
-  domain_id   = data.linode_domain.dns_zone_org.id
+  domain_id   = linode_domain.dns_zone.id
   name        = "probe"
   record_type = "A"
   ttl_sec     = 30
