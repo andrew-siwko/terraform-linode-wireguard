@@ -69,6 +69,14 @@ resource "linode_domain_record" "qha_admin_net_a_record" {
   target      = one(linode_instance.asiwko-qha-proxy-01.ipv4)
 }
 
+resource "linode_domain_record" "probe_a_record" {
+  domain_id   = data.linode_domain.dns_zone_org.id
+  name        = "probe"
+  record_type = "A"
+  ttl_sec     = 30
+  target      = one(linode_instance.asiwko-qha-proxy-01.ipv4)
+}
+
 # siwko.com is a third, unrelated domain already hosted on the same Linode
 # account/nameservers -- same data-source-not-managed-resource treatment as
 # dns_zone_net above. No app hostname is added here yet: the proxy's
