@@ -77,6 +77,19 @@ resource "linode_domain_record" "probe_a_record" {
   target      = one(linode_instance.asiwko-qha-proxy-01.ipv4)
 }
 
+# imap-rules-manager Ingress in the home k8s cluster is annotated
+# external-dns.alpha.kubernetes.io/controller: ignore (same convention as
+# qha-admin-console, www-siwko-*, etc.), so this is the only system asserting
+# this record -- no fight with k8s external-dns like the one described in the
+# qha_admin_a_record comment above.
+resource "linode_domain_record" "imap_rules_a_record" {
+  domain_id   = linode_domain.dns_zone.id
+  name        = "imap-filter"
+  record_type = "A"
+  ttl_sec     = 30
+  target      = one(linode_instance.asiwko-qha-proxy-01.ipv4)
+}
+
 # siwko.com is a third, unrelated domain already hosted on the same Linode
 # account/nameservers -- same data-source-not-managed-resource treatment as
 # dns_zone_net above. No app hostname is added here yet: the proxy's
