@@ -177,6 +177,21 @@ echo "=== Writing nginx config (HTTP redirect + HTTPS proxy to the WireGuard tun
 # "/qha-admin/" redirect) live on that app's own Ingress resource now, not
 # here -- see k8s/qha-admin-console-ingress.yaml in the qha repo.
 cat > /etc/nginx/conf.d/qha-admin.conf << NGINXFULL
+# Conditionally forwards the client's Upgrade header as-is, or "close" when
+# there isn't one -- used by the /sockjs/ location below so a real WebSocket
+# upgrade is passed through while every other request keeps normal
+# connection handling. Without this, proxy_pass to the tunnel defaults to
+# HTTP/1.0 with no Upgrade/Connection forwarding at all, so a browser's raw
+# WebSocket handshake gets no response whatsoever (confirmed live via HAR
+# capture against octoprint.siwko.org: every wss:// upgrade came back as a
+# network-level failure with zero response headers, not a clean HTTP
+# rejection) -- ingress-nginx inside the cluster already handles this
+# correctly on its own, this box was the missing hop.
+map \$http_upgrade \$connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
 server {
     listen 80;
     server_name *.${domain_name} *.${domain_name_alt} *.${domain_name_com} ${domain_name} ${domain_name_alt} ${domain_name_com};
@@ -233,6 +248,28 @@ server {
         proxy_connect_timeout 5s;
         proxy_read_timeout 300s;
         client_max_body_size 512m;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+
+    # SockJS (used by OctoPrint's UI, and any future app that adopts it)
+    # needs its WebSocket transport's Upgrade/Connection headers forwarded,
+    # plus a read timeout long enough for a real long-lived connection --
+    # the general fail-fast 15s below would otherwise kill it almost
+    # immediately even with the headers fixed. Kept as its own location,
+    # ahead of the general "/" below, same pattern as /wordpress above: this
+    # isn't a case for loosening the fail-fast behavior globally. Path-based
+    # (not Host-based) since this box doesn't branch per-app -- harmless for
+    # any other app that happens to have a /sockjs/ path of its own.
+    location /sockjs/ {
+        proxy_pass http://${wireguard_client_tunnel_ip}:${tunnel_backend_port};
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection \$connection_upgrade;
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 3600s;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
