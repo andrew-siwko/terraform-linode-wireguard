@@ -102,6 +102,18 @@ resource "linode_domain_record" "motion_a_record" {
   target      = one(linode_instance.asiwko-qha-proxy-01.ipv4)
 }
 
+# octoprint-ingress in the home k8s cluster is annotated
+# external-dns.alpha.kubernetes.io/controller: ignore (same convention as
+# qha-admin-console, imap-filter, motion, etc.), so this is the only
+# system asserting this record.
+resource "linode_domain_record" "octoprint_a_record" {
+  domain_id   = linode_domain.dns_zone.id
+  name        = "octoprint"
+  record_type = "A"
+  ttl_sec     = 30
+  target      = one(linode_instance.asiwko-qha-proxy-01.ipv4)
+}
+
 # siwko.com is a third, unrelated domain already hosted on the same Linode
 # account/nameservers -- same data-source-not-managed-resource treatment as
 # dns_zone_net above. No app hostname is added here yet: the proxy's
