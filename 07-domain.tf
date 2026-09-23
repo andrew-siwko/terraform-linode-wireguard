@@ -137,6 +137,22 @@ data "linode_domain" "dns_zone_com" {
   domain = var.domain_name_com
 }
 
+# headlamp-ingress in the home k8s cluster is annotated
+# external-dns.alpha.kubernetes.io/controller: ignore (same convention as
+# qha-admin-console, imap-filter, motion, octoprint, cards, etc.), so this is
+# the only system asserting this record. No edge nginx changes needed --
+# server_name is already the wildcard block described below, so it falls
+# through to the tunnel proxy_pass and Host-header routing happens in
+# ingress-nginx once traffic reaches the cluster, same as every other
+# hostname here.
+resource "linode_domain_record" "headlamp_a_record" {
+  domain_id   = linode_domain.dns_zone.id
+  name        = "headlamp"
+  record_type = "A"
+  ttl_sec     = 30
+  target      = one(linode_instance.asiwko-qha-proxy-01.ipv4)
+}
+
 # A wildcard A record (name = "*") was tried here and reverted -- DO NOT
 # re-add one. This cluster's nodes carry "siwko.org" as a DNS search domain
 # (pre-existing, unrelated to this project), and with ndots:5 in every
